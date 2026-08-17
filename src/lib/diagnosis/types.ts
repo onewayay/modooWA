@@ -19,6 +19,16 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
   recommendation: "권고",
 };
 
+/**
+ * 심각도 표시 순서 단일 소스 — 심각한 것부터.
+ * 요약 패널의 건수 나열과 결과 목록의 그룹 순서가 어긋나면 안 되므로 한 곳에서만 정의한다.
+ */
+export const SEVERITY_ORDER: readonly Severity[] = [
+  "critical",
+  "warning",
+  "recommendation",
+];
+
 /** 이슈가 발생한 위치 */
 export type IssueLocation = {
   /** 실제 페이지에서 해당 요소를 다시 찾을 때 쓰는 CSS 선택자 */

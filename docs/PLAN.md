@@ -256,3 +256,14 @@ result_json 스키마 상세 설계 [추가로 정할 사항(category 개수, se
 
 - axe-core: https://github.com/dequelabs/axe-core
 - KWCAG 2.2 (국가표준): https://a11ykr.github.io/kwcag22/
+
+### 등급 체계 (이슈 #5에서 확정)
+
+| 점수 구간 | 등급      |
+| --------- | --------- |
+| 90점 이상 | 우수      |
+| 70~89점   | 양호      |
+| 50~69점   | 개선 필요 |
+| 49점 이하 | 미흡      |
+
+색상은 severity 토큰 재사용: 우수(success) / 양호(info) / 개선 필요(warning) / 미흡(critical)

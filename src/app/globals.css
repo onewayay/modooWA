@@ -114,6 +114,20 @@
   --spacing-gutter: 24px;
   --spacing-margin-mobile: 16px;
   --spacing-margin-desktop: 40px;
+
+  /* Motion — 진단 진행 표시용 스캔 바.
+     DESIGN.md에 모션 규정이 없어 "측정 기기" 페르소나에 맞춰 선형(linear) 등속 이동만 사용한다.
+     세그먼트 폭이 트랙의 1/4이므로 -100%는 왼쪽 완전 이탈, 400%는 오른쪽 완전 이탈 지점이다. */
+  --animate-scan: scan 1.4s linear infinite;
+
+  @keyframes scan {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
 }
 
 body {

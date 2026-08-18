@@ -11,6 +11,20 @@ export async function proxy(request: NextRequest) {
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
 
   if (!user && !isPublicPath) {
+    // API 경로는 리다이렉트하면 안 된다. fetch는 302를 그대로 따라가 로그인 HTML을
+    // 200으로 받아오고, 호출부는 그걸 "요청 성공"으로 오인한다(진단이 안 됐는데 결과 화면으로 넘어감).
+    // 기계가 읽는 경로에는 기계가 읽을 수 있는 응답을 준다.
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "unauthorized",
+          message: "로그인이 필요합니다. 다시 로그인해 주세요.",
+        },
+        { status: 401 }
+      );
+    }
+
     // 비로그인 상태로 보호된 경로에 접근 → 로그인 화면으로 리다이렉트
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";

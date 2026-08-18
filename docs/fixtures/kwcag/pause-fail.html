@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kwcag-pause-stop-hide / 실패</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 24px;
+      }
+      .rolling-banner {
+        position: relative;
+        width: 320px;
+        height: 120px;
+        background: #fee2e2;
+        animation: roll 3s linear infinite;
+      }
+      @keyframes roll {
+        from {
+          left: 0;
+        }
+        to {
+          left: 200px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>멈출 수 없는 움직임만 있는 페이지</h1>
+
+    <!-- 실패 ①: 레거시 태그. 사용자가 멈출 방법이 없다. -->
+    <marquee>오늘의 공지 사항입니다</marquee>
+
+    <!-- 실패 ②: 무한 반복으로 위치가 바뀌는 큰 요소인데 정지 버튼이 없다. -->
+    <div class="rolling-banner">자동으로 흐르는 배너</div>
+  </body>
+</html>

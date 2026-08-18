@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kwcag-autoplay-audio-control / 통과</title>
+  </head>
+  <body>
+    <h1>자동 재생 소리 정지 수단이 있는 페이지</h1>
+
+    <!-- 통과: 소리 없이 시작한다 -->
+    <video autoplay muted playsinline width="320" height="180"></video>
+
+    <!-- 통과: 재생 컨트롤을 제공한다 -->
+    <video autoplay controls width="320" height="180"></video>
+
+    <!-- 통과: 컨트롤은 없지만 페이지에 음소거 버튼이 있다 -->
+    <audio autoplay></audio>
+    <button type="button" aria-label="배경음 음소거">🔇</button>
+  </body>
+</html>

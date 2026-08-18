@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kwcag-pause-stop-hide / 함정</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 24px;
+      }
+
+      /* [통과여야 함] 로딩 스피너. 무한 반복이지만 role="progressbar"라 정지 대상이 아니다.
+         (transform만 움직이므로 애니메이션 속성 필터에도 걸린다 — 이중으로 안전하다) */
+      .spinner {
+        width: 64px;
+        height: 64px;
+        border: 4px solid #cbd5e1;
+        border-top-color: #004ac6;
+        border-radius: 50%;
+        animation: rotate 1s linear infinite;
+      }
+      @keyframes rotate {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* [통과여야 함] opacity만 움직이는 큰 요소 = 펄스/셔머. 이동도 점멸도 아니다. */
+      .hero-fade {
+        width: 320px;
+        height: 120px;
+        background: #e2e8f0;
+        animation: fade 2s ease-in-out infinite alternate;
+      }
+      @keyframes fade {
+        from {
+          opacity: 0.4;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      /* [통과여야 함] 위치가 움직이지만 48×48보다 작다 = 장식. */
+      .tiny-dot {
+        position: relative;
+        width: 20px;
+        height: 20px;
+        background: #0891b2;
+        animation: roll 2s linear infinite;
+      }
+
+      /* [통과여야 함] width가 움직이지만 이름이 로딩 표시를 가리킨다(마지막 수단 필터). */
+      .loading-bar {
+        width: 300px;
+        height: 60px;
+        background: #94a3b8;
+        animation: grow 2s linear infinite;
+      }
+      @keyframes grow {
+        from {
+          width: 60px;
+        }
+        to {
+          width: 300px;
+        }
+      }
+
+      /*
+        [통과여야 함] 다른 필터를 전부 통과하는 진짜 후보지만,
+        사용자의 동작 최소화 설정에 이미 대응하고 있다.
+        index.ts가 emulateMedia로 실제 측정해서 확인한다.
+      */
+      .guarded-marquee {
+        position: relative;
+        width: 320px;
+        height: 120px;
+        background: #fef3c7;
+        animation: roll 3s linear infinite;
+      }
+      @keyframes roll {
+        from {
+          left: 0;
+        }
+        to {
+          left: 200px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .guarded-marquee {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>정지 수단 함정 모음</h1>
+
+    <div class="spinner" role="progressbar" aria-label="불러오는 중"></div>
+    <div class="hero-fade">천천히 밝아지는 배경</div>
+    <div class="tiny-dot"></div>
+    <div class="loading-bar"></div>
+    <div class="guarded-marquee">동작 최소화 설정을 존중하는 배너</div>
+  </body>
+</html>

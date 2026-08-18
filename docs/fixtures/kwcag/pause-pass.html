@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kwcag-pause-stop-hide / 통과</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 24px;
+      }
+      /* 무한 반복으로 실제 위치가 움직인다 = 후보로 남는다 */
+      .rolling-notice {
+        position: relative;
+        width: 320px;
+        height: 120px;
+        background: #e2e8f0;
+        animation: roll 3s linear infinite;
+      }
+      @keyframes roll {
+        from {
+          left: 0;
+        }
+        to {
+          left: 200px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>움직이지만 멈출 수 있는 페이지</h1>
+
+    <div class="rolling-notice">자동으로 흐르는 공지</div>
+
+    <!-- 후보가 있어도 정지 컨트롤이 있으면 통과다 -->
+    <button type="button" aria-label="공지 흐름 정지">■</button>
+  </body>
+</html>

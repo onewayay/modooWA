@@ -33,37 +33,73 @@ export function truncateSnippet(html: string): string {
 /* ------------------------------------------------------------------ */
 
 /**
+ * 카테고리 어휘 단일 소스.
+ *
+ * types.ts의 `Issue["category"]`가 union이 아니라 `string`이라 오타가 컴파일 타임에 안 잡힌다.
+ * 아래 두 테이블과 KWCAG 커스텀 룰이 같은 라벨을 각자 문자열 리터럴로 적으면 "구조"와 "구조 "
+ * 같은 차이로 카테고리 필터가 조용히 갈라지므로, 라벨 값은 여기서만 만든다.
+ */
+export const ISSUE_CATEGORY = {
+  image: "이미지",
+  color: "색상",
+  forms: "폼",
+  keyboard: "키보드",
+  language: "언어",
+  tables: "표",
+  media: "멀티미디어",
+  aria: "ARIA",
+  structure: "구조",
+  /** cat.* 태그도 없고 id 예외도 아닌 룰의 폴백 */
+  other: "기타",
+} as const;
+
+/**
  * axe의 `cat.*` 태그 → modooWA 분류 라벨.
  * axe 룰에는 `cat.*` 태그가 정확히 1개씩 붙어 있으므로 첫 번째로 매칭되는 것을 쓰면 된다.
  */
 const CATEGORY_BY_TAG: Readonly<Record<string, string>> = {
-  "cat.text-alternatives": "이미지",
-  "cat.color": "색상",
-  "cat.forms": "폼",
-  "cat.keyboard": "키보드",
-  "cat.language": "언어",
-  "cat.tables": "표",
-  "cat.time-and-media": "멀티미디어",
-  "cat.aria": "ARIA",
-  "cat.name-role-value": "ARIA",
-  "cat.structure": "구조",
-  "cat.semantics": "구조",
-  "cat.parsing": "구조",
-  "cat.sensory-and-visual-cues": "구조",
+  "cat.text-alternatives": ISSUE_CATEGORY.image,
+  "cat.color": ISSUE_CATEGORY.color,
+  "cat.forms": ISSUE_CATEGORY.forms,
+  "cat.keyboard": ISSUE_CATEGORY.keyboard,
+  "cat.language": ISSUE_CATEGORY.language,
+  "cat.tables": ISSUE_CATEGORY.tables,
+  "cat.time-and-media": ISSUE_CATEGORY.media,
+  "cat.aria": ISSUE_CATEGORY.aria,
+  "cat.name-role-value": ISSUE_CATEGORY.aria,
+  "cat.structure": ISSUE_CATEGORY.structure,
+  "cat.semantics": ISSUE_CATEGORY.structure,
+  "cat.parsing": ISSUE_CATEGORY.structure,
+  "cat.sensory-and-visual-cues": ISSUE_CATEGORY.structure,
 };
 
 /**
- * 태그 분류가 사용자 관점과 어긋나는 룰만 id로 덮어쓴다.
+ * 태그 분류가 사용자 관점과 어긋나는 룰, 그리고 axe 태그 자체가 없는 KWCAG 커스텀 룰을 id로 덮어쓴다.
+ *
  * document-title / frame-title은 axe 기준으로 `cat.text-alternatives`(대체 텍스트)지만,
  * "이미지" 필터를 켠 사용자가 페이지 제목 누락을 보게 되면 분류를 신뢰하지 않게 된다.
+ *
+ * kwcag-* 룰은 axe를 거치지 않아 `cat.*` 태그가 없다. 여기 등록하지 않으면 전부 "기타"로 떨어진다.
+ * 카테고리만 KWCAG 모듈이 아니라 이 테이블에 두는 이유는, 이 표가 이미 "룰 id → 카테고리"를 위해
+ * 존재하는 자리이고(위 두 선례), 어휘가 두 파일로 흩어지면 카테고리 필터가 붙을 때 반드시 어긋나기 때문이다.
+ *
+ * kwcag-pause-stop-hide를 "구조"에 넣은 건 확정된 결정사항이다 — 정지 수단 부재는 성격상
+ * 별도 "타이밍" 축에 가깝지만, 룰 하나 때문에 카테고리를 늘리면 대다수 페이지에서 항목이 0건인
+ * 필터가 생긴다(PLAN.md §11, 이슈 #7).
  */
 const CATEGORY_BY_RULE_ID: Readonly<Record<string, string>> = {
-  "document-title": "구조",
-  "frame-title": "구조",
+  "document-title": ISSUE_CATEGORY.structure,
+  "frame-title": ISSUE_CATEGORY.structure,
+
+  // KWCAG 커스텀 룰 (engine/kwcag) — PLAN.md §11
+  "kwcag-focus-visible": ISSUE_CATEGORY.keyboard,
+  "kwcag-autoplay-audio-control": ISSUE_CATEGORY.media,
+  "kwcag-pause-stop-hide": ISSUE_CATEGORY.structure,
+  "kwcag-no-auto-execution": ISSUE_CATEGORY.forms,
 };
 
-/** cat.* 태그도 없고 id 예외도 아닌 룰(주로 커스텀 룰)의 기본 분류 */
-const DEFAULT_CATEGORY = "기타";
+/** cat.* 태그도 없고 id 예외도 아닌 룰의 기본 분류 */
+const DEFAULT_CATEGORY: string = ISSUE_CATEGORY.other;
 
 export function getCategory(ruleId: string, tags: readonly string[]): string {
   const override = CATEGORY_BY_RULE_ID[ruleId];

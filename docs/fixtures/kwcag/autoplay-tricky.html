@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kwcag-autoplay-audio-control / 함정</title>
+  </head>
+  <body>
+    <h1>속성이 아니라 프로퍼티를 봐야 하는 페이지</h1>
+
+    <!-- [통과] muted 속성은 없지만 JS로 muted 프로퍼티를 켰다. getAttribute로는 못 잡는다. -->
+    <video id="muted-by-script" autoplay playsinline width="320" height="180"></video>
+
+    <!-- [통과] controls 속성은 없지만 JS로 controls 프로퍼티를 켰다. -->
+    <audio id="controls-by-script" autoplay></audio>
+
+    <!-- [실패] 마크업에는 muted가 있지만 JS가 다시 꺼 버렸다. 속성만 보면 통과로 오판한다. -->
+    <audio id="unmuted-by-script" autoplay muted></audio>
+
+    <script>
+      document.getElementById("muted-by-script").muted = true;
+      document.getElementById("controls-by-script").controls = true;
+      document.getElementById("unmuted-by-script").muted = false;
+    </script>
+  </body>
+</html>

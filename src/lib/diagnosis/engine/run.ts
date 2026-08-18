@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { Page } from "playwright";
+
 import { DIAGNOSE_ERROR_MESSAGE } from "@/lib/diagnosis/api";
 import { runAxe } from "@/lib/diagnosis/engine/axe";
 import {
@@ -11,6 +13,8 @@ import {
   isDiagnosisError,
 } from "@/lib/diagnosis/engine/errors";
 import { assertPublicUrl } from "@/lib/diagnosis/engine/guard";
+import { runKwcagRules } from "@/lib/diagnosis/engine/kwcag";
+import type { KwcagContribution } from "@/lib/diagnosis/engine/map";
 import { toDiagnosisResult } from "@/lib/diagnosis/engine/map";
 import { openTarget } from "@/lib/diagnosis/engine/navigate";
 import type { DiagnosisResult } from "@/lib/diagnosis/types";
@@ -31,6 +35,19 @@ const NAVIGATE_BUDGET_MS = 15_000;
 /** networkidle은 "되면 좋은 것"이라 예산을 짧게 준다. */
 const SETTLE_BUDGET_MS = 4_000;
 const AXE_BUDGET_MS = 12_000;
+
+/**
+ * KWCAG 커스텀 룰 패스 예산.
+ *
+ * 실측 근거: ②④는 순수 DOM 속성 읽기라 각 10ms 미만, ③은 document.getAnimations() 기반이라
+ * 10~50ms + prefers-reduced-motion 재측정 왕복 100~300ms, ①이 대표 표본 40~60개 기준 150~600ms.
+ * evaluate 왕복까지 더해 일반 0.5초, 최악 2.5초다.
+ */
+const KWCAG_BUDGET_MS = 3_000;
+/** 이보다 적게 남았으면 시작하지 않는다. 반쯤 돌다 잘린 룰 결과는 없느니만 못하다. */
+const KWCAG_MIN_MS = 1_200;
+/** 결과 매핑·응답 직렬화 몫. KWCAG가 데드라인까지 다 먹지 않게 떼어 둔다. */
+const KWCAG_RESERVE_MS = 500;
 
 export type RunDiagnosisInput = {
   url: string;
@@ -94,6 +111,34 @@ function normalizeEngineError(
   });
 }
 
+/**
+ * KWCAG 커스텀 룰 패스 — **예산이 남았을 때만** 도는 선택 단계.
+ *
+ * 여기서 remaining()을 쓰지 않는 것이 이 함수의 존재 이유다. remaining()은 데드라인이 지나면
+ * throw하는데, 바로 앞 axe 단계가 남은 예산을 전부 먹을 수 있다. 그대로 호출했다면 axe가 위반을
+ * 정상적으로 다 찾아낸 진단이 "KWCAG를 붙였다"는 이유만으로 시간 초과 실패로 뒤집힌다.
+ * 필수 단계(axe)와 선택 단계(KWCAG)는 예산 계층에서 다르게 취급해야 한다.
+ *
+ * 스킵도 결과에 흔적을 남긴다 — completed: false가 engineVersion의 "(skipped)"가 된다.
+ * 검사하지 못한 것이 위반 0건과 똑같이 보이면 안 되기 때문이다.
+ */
+async function runKwcagStage(options: {
+  page: Page;
+  signal: AbortSignal;
+  deadline: number;
+}): Promise<KwcagContribution> {
+  const left = options.deadline - Date.now() - KWCAG_RESERVE_MS;
+  if (left < KWCAG_MIN_MS) {
+    return { issues: [], completed: false };
+  }
+
+  return runKwcagRules({
+    page: options.page,
+    signal: options.signal,
+    timeoutMs: Math.min(KWCAG_BUDGET_MS, left),
+  });
+}
+
 export async function runDiagnosis({
   url,
   signal,
@@ -134,10 +179,20 @@ export async function runDiagnosis({
     });
     throwIfAborted(signal);
 
-    return toDiagnosisResult(axeResults, {
-      url: guard.url.toString(),
-      diagnosedAt: new Date().toISOString(),
-    });
+    // axe **뒤**에 도는 것이 중요하다. 룰 ①이 요소마다 focus()를 호출해 DOM 상태를 바꾸는데,
+    // axe 평가 도중이었다면 대상 사이트의 focus 핸들러가 이후 룰(실제 렌더 색을 읽는
+    // color-contrast 등)의 결과를 오염시킨다.
+    const kwcag = await runKwcagStage({ page, signal, deadline });
+    throwIfAborted(signal);
+
+    return toDiagnosisResult(
+      axeResults,
+      {
+        url: guard.url.toString(),
+        diagnosedAt: new Date().toISOString(),
+      },
+      kwcag
+    );
   } catch (error) {
     throw normalizeEngineError(error, signal);
   } finally {

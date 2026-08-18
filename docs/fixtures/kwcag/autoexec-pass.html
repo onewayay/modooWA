@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kwcag-no-auto-execution / 통과</title>
+  </head>
+  <body>
+    <h1>사용자가 직접 실행하는 페이지</h1>
+
+    <form action="/search" method="get">
+      <label for="sort">정렬 기준</label>
+      <!-- 통과: 제출 코드가 있어도 같은 form 안에 확인 버튼이 있어 사용자가 실행 시점을 정한다 -->
+      <select id="sort" name="sort" onchange="this.form.submit()">
+        <option value="new">최신순</option>
+        <option value="old">오래된순</option>
+      </select>
+      <button type="submit">적용</button>
+    </form>
+
+    <form action="/filter" method="get">
+      <label for="keyword">검색어</label>
+      <!-- 통과: 이동·제출 패턴이 없다 -->
+      <input id="keyword" name="keyword" type="text" onfocus="this.select()" />
+      <button type="submit">검색</button>
+    </form>
+  </body>
+</html>

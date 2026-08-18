@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kwcag-no-auto-execution / 실패</title>
+  </head>
+  <body>
+    <h1>선택만으로 실행되는 페이지</h1>
+
+    <label for="menu">바로가기</label>
+    <!-- 실패 ①: 고르는 즉시 페이지가 이동한다. 확인 버튼도 없다. -->
+    <select id="menu" onchange="location.href=this.value">
+      <option value="/notice.html">공지사항</option>
+      <option value="/faq.html">자주 묻는 질문</option>
+    </select>
+
+    <label for="code">고객번호</label>
+    <!-- 실패 ②: 초점이 닿는 것만으로 초점을 빼앗아 키보드 사용자가 입력할 수 없다. -->
+    <input id="code" type="text" onfocus="this.blur()" />
+  </body>
+</html>

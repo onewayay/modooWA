@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kwcag-focus-visible / 통과</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 24px;
+      }
+      /* 커스텀 링: outline을 직접 그린다 */
+      .custom-ring:focus-visible {
+        outline: 3px solid #004ac6;
+        outline-offset: 2px;
+      }
+      /* 색 변화만으로 포커스를 표시한다 — WCAG 2.4.7은 "보이는 표시"만 요구하므로 통과다 */
+      .color-only:focus {
+        background-color: #0f172a;
+        color: #ffffff;
+      }
+      /* 테두리 변화 (인라인 style로 테두리를 주면 :focus 규칙이 덮이지 않는다) */
+      .border-only {
+        border: 1px solid #94a3b8;
+      }
+      .border-only:focus {
+        border-color: #dc2626;
+        border-width: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>포커스 표시가 있는 페이지</h1>
+
+    <!-- 아무 스타일도 없는 버튼: UA 기본 포커스 링(outline-style: auto)이 그려진다 -->
+    <button type="button">기본 버튼</button>
+
+    <a class="custom-ring" href="#detail">커스텀 링 링크</a>
+
+    <button class="color-only" type="button">색으로 표시하는 버튼</button>
+
+    <input class="border-only" type="text" aria-label="검색어" />
+  </body>
+</html>

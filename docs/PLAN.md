@@ -51,19 +51,7 @@
 - [ ] **"저장하기" 버튼**: 클릭 시 폴더 선택 모달 노출 (기존 폴더 목록 + 새 폴더 만들기) → 선택 완료 시 DB 저장
 - [ ] **기본 폴더 자동 생성**: 신규 가입 시(또는 첫 저장 시) "기본 폴더" 자동 생성
 - [ ] RLS 정책: 사용자 본인 데이터만 접근 가능
-- [ ] KWCAG 커스텀 룰 항목 선정 `[TODO]`
-
-```jsx
-  // ** 예시 **
-
-  항목명: 반복 영역 건너뛰기 링크
-  KWCAG 조항: [원문 대조 후 조항 번호 기입]
-  자동화 방식:
-    - 페이지 최상단에 "본문 바로가기" 류의 skip link가 있는지 검사
-    - 조건: 첫 포커스 가능 요소가 href="#main" 또는 유사 패턴을 가진 앵커인지
-    - 통과 조건: skip link 존재 + 대상 요소가 실제로 DOM에 존재
-    - 실패 조건: skip link 없음, 또는 있어도 target이 존재하지 않음
-```
+- [ ] KWCAG 커스텀 룰 항목 선정 완료 (아래 섹션 참고)
 
 ### Phase 2
 
@@ -213,6 +201,17 @@ result_json 스키마 상세 설계 [추가로 정할 사항(category 개수, se
 - `category` 값의 종류를 정확히 몇 개로 나눌지 (이미지/색상/구조/폼/키보드 정도가 axe-core 룰 기준으로 자연스러운데, KWCAG 항목이 정해지면 카테고리가 늘 수도 있어요)
 - `severity` 3단계(critical/warning/recommendation)가 화면 그루핑 기준과 맞는지
 
+### 등급 체계 (이슈 #5에서 확정)
+
+| 점수 구간 | 등급      |
+| --------- | --------- |
+| 90점 이상 | 우수      |
+| 70~89점   | 양호      |
+| 50~69점   | 개선 필요 |
+| 49점 이하 | 미흡      |
+
+색상은 severity 토큰 재사용: 우수(success) / 양호(info) / 개선 필요(warning) / 미흡(critical)
+
 ---
 
 ## 7. 기술 스택
@@ -257,13 +256,112 @@ result_json 스키마 상세 설계 [추가로 정할 사항(category 개수, se
 - axe-core: https://github.com/dequelabs/axe-core
 - KWCAG 2.2 (국가표준): https://a11ykr.github.io/kwcag22/
 
-### 등급 체계 (이슈 #5에서 확정)
+## 11. KWCAG 커스텀 룰 명세 (이슈 #7)
 
-| 점수 구간 | 등급      |
-| --------- | --------- |
-| 90점 이상 | 우수      |
-| 70~89점   | 양호      |
-| 50~69점   | 개선 필요 |
-| 49점 이하 | 미흡      |
+KWCAG 2.2 원문 33개 검사항목을 axe-core(105개 룰, WCAG 태그 73개) 대조 후, "axe-core가 커버하지 않으면서 자동 판별 가능한" 4개 항목을 선정함.
 
-색상은 severity 토큰 재사용: 우수(success) / 양호(info) / 개선 필요(warning) / 미흡(critical)
+선정 기준
+axe-core의 73개 WCAG 태그 룰과 중복되지 않을 것
+사람의 주관적 판단(의미 이해, 시각 예술적 판단) 없이 코드/DOM/CSS로 기계적 판별 가능할 것
+단일 페이지 정적 분석(+ Playwright 상호작용) 범위 내에서 검증 가능할 것
+제외된 항목 중 짚어둘 것
+6.4.1 반복 영역 건너뛰기(skip link): axe-core의 bypass 룰이 이미 WCAG 2.4.1을 커버하므로 제외
+5.2.1 자막 제공: <track> 존재 여부만 확인 가능하나, 자막 내용의 정확성은 검증 불가 — "자막 있음 = 통과"라는 잘못된 안심을 줄 위험이 있어 제외
+항목 ① — 초점 인디케이터 제거 감지
+항목명: 포커스 인디케이터 제거 감지
+KWCAG 조항: 6.1.2 (초점 이동과 표시)
+대응 WCAG: 2.4.7 (Focus Visible)
+axe-core 미커버 이유: focus-order-semantics 룰은 포커스 가능 요소의 마크업
+유효성만 검사하고, outline: none으로 시각적 표시가 제거됐는지는 검사하지 않음
+
+자동화 방식:
+
+- 포커스 가능 요소(a, button, input, select, textarea, [tabindex]) 순회
+- Playwright로 각 요소에 focus() 호출
+- getComputedStyle로 포커스 전/후 outline, box-shadow, border 비교
+
+통과 조건: 포커스 시 outline 또는 box-shadow/border 등 대체 시각 표시가
+포커스 전과 다르게 나타남
+실패 조건: 포커스 전후 스타일 변화 없음 (outline: none만 있고 대체 표시 없음)
+항목 ② — 자동 재생 소리 정지 수단 확인
+항목명: 자동 재생 소리 정지 수단 확인
+KWCAG 조항: 5.4.2 (자동 재생 금지)
+대응 WCAG: 1.4.2 (Audio Control)
+axe-core 미커버 이유: 재생 시간 경과 판단이 필요한 룰이라 axe-core 기본
+룰셋에 없음
+
+자동화 방식:
+
+- <audio>, <video> 요소 중 autoplay 속성 존재 + muted 속성 없음인 것 탐지
+- 해당 요소에 controls 속성 존재 여부 확인
+
+통과 조건: autoplay 요소가 없거나, 있다면 muted이거나 controls 속성 존재
+실패 조건: autoplay + 소리 있음(muted 아님) + controls 없음
+항목 ③ — 자동 갱신/스크롤 콘텐츠 정지 수단 확인
+항목명: 자동 갱신/스크롤 콘텐츠 정지 수단 확인
+KWCAG 조항: 6.2.2 (정지 기능 제공)
+대응 WCAG: 2.2.2 (Pause, Stop, Hide)
+axe-core 미커버 이유: 레거시 태그·무한 반복 애니메이션에 대한 정지 수단
+검사가 axe-core 기본 룰에 없음
+
+자동화 방식:
+
+- <marquee>, <blink> 태그 존재 여부
+- CSS animation-iteration-count: infinite 적용 요소 탐지 (getComputedStyle)
+- 위 요소 근처에 정지/일시정지 버튼(aria-label에 "정지"/"일시정지"/"pause"
+  포함하는 button) 존재 여부 확인
+
+통과 조건: 무한 반복 애니메이션/marquee가 없거나, 있다면 정지 컨트롤 존재
+실패 조건: 무한 반복 애니메이션/marquee 존재 + 정지 컨트롤 없음
+항목 ④ — 초점/입력만으로 자동 실행되는 기능 감지 (휴리스틱, 신뢰도 낮음)
+항목명: 초점/입력만으로 자동 실행되는 기능 감지
+KWCAG 조항: 7.2.1 (사용자 요구에 따른 실행)
+대응 WCAG: 3.2.1 (On Focus), 3.2.2 (On Input)
+axe-core 미커버 이유: 이벤트 핸들러의 의미(자동 제출/이동 여부) 판단이
+필요한 룰이라 axe-core 기본 룰셋에 없음
+
+⚠️ 한계: 인라인 이벤트 핸들러(onchange, onfocus 속성)만 탐지 가능.
+별도 JS 파일에서 addEventListener로 등록된 핸들러는 탐지 불가.
+false negative가 있을 수 있는 휴리스틱 룰로 간주할 것.
+
+자동화 방식:
+
+- select, input[type=radio], input[type=checkbox]의 onchange 속성 내
+  submit(), location.href, window.open 패턴 문자열 탐지
+- 폼 요소의 onfocus 속성 내 동일 패턴 탐지
+
+통과 조건: 위 패턴이 없거나, 있어도 별도 확인 버튼이 함께 존재
+실패 조건: onchange/onfocus만으로 페이지 이동/제출이 발생하는 코드 존재
+### 구현 확정 사항 (이슈 #7에서 결정)
+
+**구현 방식: axe.configure 커스텀 룰이 아니라 "axe 실행 후 별도 후처리 패스"**
+
+axe의 룰 모델은 단일 패스·DOM 읽기 전용을 전제하는데, 이 4개 룰은 그 밖을 요구한다 —
+룰 ①은 `focus()`로 DOM 상태를 바꾸고 트랜지션 진행 여부(시간 축)를 봐야 하며, 룰 ③은
+`prefers-reduced-motion`을 에뮬레이션한 뒤 재측정해야 한다(Playwright 레벨 API).
+특히 axe 평가 도중 수백 개 요소를 포커스하면 대상 사이트의 focus 핸들러가 DOM을 바꿔
+이후 axe 룰(실제 렌더 색을 읽는 `color-contrast` 등)의 결과를 오염시킨다.
+
+구현 위치: `src/lib/diagnosis/engine/kwcag/` (probe / rules / index),
+`engine/run.ts`가 axe 뒤에 **선택 단계**로 호출하고 `engine/map.ts`가 정렬 전에 합류시킨다.
+예산이 부족하면 KWCAG 패스는 통째로 스킵되며, 그 사실은 `meta.engineVersion`의
+`kwcag@1.0(skipped)` 표기로 남는다 — "검사 못 했음"이 "위반 0건"과 똑같이 보이면 안 되기 때문.
+
+**ruleId · severity · category (확정)**
+
+| 항목 | ruleId | severity | category |
+| --- | --- | --- | --- |
+| ① 포커스 인디케이터 | `kwcag-focus-visible` | 치명 | 키보드 |
+| ② 자동 재생 소리 | `kwcag-autoplay-audio-control` | 치명 | 멀티미디어 |
+| ③ 정지 기능 | `kwcag-pause-stop-hide` | 경고 | 구조 |
+| ④ 자동 실행 | `kwcag-no-auto-execution` | 경고 | 폼 |
+
+- ruleId는 `kwcag-` 접두사 규약을 따른다 (이슈 #6의 `toRuleType()`이 이 접두사로 판별).
+- ③④를 경고로 둔 이유: 점수 산식상 치명 1건이면 69점 상한이라 등급이 즉시 두 단계 떨어진다.
+  ③은 로딩 스피너 오탐, ④는 인라인 핸들러만 보는 휴리스틱이라 오탐 비용이 비대칭이다.
+- ③의 category는 신규 "타이밍"을 만들지 않고 기존 "구조"를 재사용한다 — 룰 하나 때문에
+  카테고리를 늘리면 대다수 페이지에서 항목이 0건인 필터가 생긴다.
+- ④는 description 마지막에 탐지 범위 한계를 한 문장 명시한다("이벤트 속성과 프로퍼티만 확인").
+  가장 위험한 오해가 "검출 0건 = 준수"이기 때문이다.
+- category 어휘는 실제로 **9종 + 폴백 "기타"** 다(위 본문의 "13종"은 오기).
+  단일 소스는 `engine/rules.ts`의 `ISSUE_CATEGORY`.

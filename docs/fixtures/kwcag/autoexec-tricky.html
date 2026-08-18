@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kwcag-no-auto-execution / 함정</title>
+  </head>
+  <body>
+    <h1>속성이 아니라 프로퍼티를 봐야 하는 페이지</h1>
+
+    <label for="jump">지역 선택</label>
+    <!-- [실패] 마크업에는 핸들러가 없다. JS가 onchange 프로퍼티에 함수를 할당한다.
+         getAttribute("onchange")로는 절대 잡히지 않는다(국내 레거시 사이트에서 매우 흔한 형태). -->
+    <select id="jump">
+      <option value="/seoul.html">서울</option>
+      <option value="/busan.html">부산</option>
+    </select>
+
+    <form action="/apply" method="post">
+      <label for="grade">등급</label>
+      <!-- [통과] 제출 코드가 있지만 같은 form에 확인 버튼이 있다 -->
+      <select id="grade" name="grade" onchange="this.form.submit()">
+        <option value="a">A</option>
+        <option value="b">B</option>
+      </select>
+      <button type="submit">신청</button>
+    </form>
+
+    <!-- [통과] onchange는 있지만 이동·제출 패턴이 아니다 -->
+    <label>
+      <input type="checkbox" onchange="console.log('checked')" />
+      알림 받기
+    </label>
+
+    <script>
+      document.getElementById("jump").onchange = function () {
+        location.href = this.value;
+      };
+    </script>
+  </body>
+</html>

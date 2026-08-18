@@ -30,7 +30,14 @@ import type {
 import { SEVERITY_ORDER } from "@/lib/diagnosis/types";
 
 /** 매핑 규칙 자체의 버전. 룰 카피나 심각도 기준을 바꾸면 올린다 — 과거 저장 결과와 구분하기 위해. */
-const MODOOWA_ENGINE_VERSION = "1.0.0";
+const MODOOWA_ENGINE_VERSION = "1.1.0";
+
+/**
+ * KWCAG 커스텀 룰셋의 버전.
+ * cache.ts가 결과를 10분간 들고 있어 룰을 추가·수정한 직후에는 옛 결과가 섞여 나올 수 있고,
+ * 저장된 result_json을 나중에 열었을 때 어떤 룰셋으로 나온 값인지도 이 표기로만 구분된다.
+ */
+const KWCAG_RULESET_VERSION = "1.0";
 
 /** testEngine 정보가 비어 있는 결과(테스트 픽스처, 리포터 교체 등)에 쓰는 표기 */
 const UNKNOWN_VERSION = "unknown";
@@ -64,8 +71,14 @@ function toSelector(node: NodeResult | undefined): string {
   return node.target.flat().join(" ");
 }
 
-/** 심각도 + 반복 횟수만 있으면 되는 정렬용 최소 정보 */
-type IssueDraft = Omit<Issue, "id">;
+/**
+ * 심각도 + 반복 횟수만 있으면 되는 정렬용 최소 정보.
+ *
+ * KWCAG 커스텀 룰 패스(engine/kwcag)는 axe를 거치지 않고 이 형태로 직접 이슈를 만들어 넘기므로
+ * export한다. 커스텀 룰이 자기 Issue 배열을 따로 들고 화면까지 가면 정렬·번호·점수가 두 갈래로
+ * 갈라지므로, 반드시 id가 붙기 **전** 형태로 합류시킨다.
+ */
+export type IssueDraft = Omit<Issue, "id">;
 
 function toIssueDraft(violation: Result): IssueDraft {
   const node = violation.nodes[0];
@@ -120,12 +133,47 @@ function compareIssues(a: IssueDraft, b: IssueDraft): number {
   return a.ruleId.localeCompare(b.ruleId);
 }
 
+/** KWCAG 커스텀 룰 패스(engine/kwcag)의 산출물 */
+export type KwcagContribution = {
+  issues: IssueDraft[];
+  /**
+   * 룰 패스가 실제로 완주했는지.
+   *
+   * false면 engineVersion에 `(skipped)`를 남긴다. "검사를 못 했다"와 "위반이 없다"가 화면에서
+   * 똑같이 보이는 것은 접근성 진단 도구가 저지를 수 있는 가장 나쁜 거짓말이라, 결과 자체에
+   * 흔적을 남겨야 한다. DiagnosisMeta.engineVersion은 자유 문자열이라 스키마 변경이 없다.
+   */
+  completed: boolean;
+};
+
+/**
+ * KWCAG 이슈의 category를 채운다.
+ *
+ * 커스텀 룰 모듈은 category를 빈 문자열로 넘긴다 — 카테고리 어휘는 rules.ts의 테이블이 단일
+ * 소스여야 하기 때문이다. 두 파일이 각자 한글 라벨을 들고 있으면 카테고리 필터가 붙을 때
+ * "키보드"와 "키보드 " 같은 차이로 조용히 갈라진다.
+ * KWCAG 룰에는 axe의 cat.* 태그가 없으므로 getCategory는 CATEGORY_BY_RULE_ID 경로로만 판정한다.
+ */
+function withResolvedCategory(draft: IssueDraft): IssueDraft {
+  if (draft.category) return draft;
+  return { ...draft, category: getCategory(draft.ruleId, []) };
+}
+
 export function toDiagnosisResult(
   results: AxeResults,
-  meta: { url: string; diagnosedAt: string }
+  meta: { url: string; diagnosedAt: string },
+  /**
+   * 기본값이 completed: false인 이유 — 인자를 아예 안 넘긴 호출은 "KWCAG를 돌리지 않았다"는
+   * 뜻이고, 그 사실이 engineVersion에 드러나는 편이 조용히 통과한 것처럼 보이는 것보다 낫다.
+   */
+  kwcag: KwcagContribution = { issues: [], completed: false }
 ): DiagnosisResult {
-  const issues: Issue[] = results.violations
-    .map(toIssueDraft)
+  // 합류 지점이 정렬 **전**이어야 국내 기준 위반이 국제 기준 위반과 같은 규칙으로 섞여 정렬된다.
+  // 정렬 뒤에 이어 붙이면 KWCAG 이슈가 항상 목록 꼬리로 밀려 "치명인데 맨 아래"가 된다.
+  const issues: Issue[] = [
+    ...results.violations.map(toIssueDraft),
+    ...kwcag.issues.map(withResolvedCategory),
+  ]
     .sort(compareIssues)
     // id는 정렬 후에 붙인다. 화면에 보이는 순서와 번호가 같아야 "003번 이슈"로 소통할 수 있다.
     .map((draft, index) => ({
@@ -150,7 +198,11 @@ export function toDiagnosisResult(
     meta: {
       url: meta.url,
       diagnosedAt: meta.diagnosedAt,
-      engineVersion: `axe-core@${axeVersion} + modoowa-engine@${MODOOWA_ENGINE_VERSION}`,
+      engineVersion: [
+        `axe-core@${axeVersion}`,
+        `modoowa-engine@${MODOOWA_ENGINE_VERSION}`,
+        `kwcag@${KWCAG_RULESET_VERSION}${kwcag.completed ? "" : "(skipped)"}`,
+      ].join(" + "),
       score: calculateScore(issues),
     },
     summary: {

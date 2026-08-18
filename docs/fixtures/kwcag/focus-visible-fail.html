@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>kwcag-focus-visible / 실패</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 24px;
+      }
+      /*
+        포커스 표시를 지우고 대체 표시를 주지 않은 전형적인 형태.
+        같은 class를 쓰는 3개 버튼은 스타일 서명이 같으므로 대표 1개만 검사되고,
+        실패하면 occurrenceCount에 그룹 크기(3)가 더해진다.
+      */
+      .ghost {
+        border: none;
+        background: transparent;
+      }
+      .ghost:focus {
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>포커스 표시가 없는 페이지</h1>
+
+    <button class="ghost" type="button">첫째</button>
+    <button class="ghost" type="button">둘째</button>
+    <button class="ghost" type="button">셋째</button>
+
+    <!-- 대조군: 기본 포커스 링이 살아 있는 버튼 -->
+    <button type="button">기본 버튼</button>
+  </body>
+</html>

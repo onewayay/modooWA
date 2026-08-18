@@ -3,27 +3,37 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-
-/** 진단 엔진이 붙기 전까지 화면 흐름만 확인하기 위한 자리표시자 지연 */
-const PLACEHOLDER_DURATION_MS = 3000;
+import { ErrorAlert } from "@/components/diagnosis/DiagnosisErrorState";
+import {
+  DIAGNOSE_ERROR_MESSAGE,
+  type DiagnoseResponse,
+} from "@/lib/diagnosis/api";
 
 type DiagnosisRunnerProps = {
   /** 서버에서 이미 parseDiagnosisUrl로 검증·정규화된 URL */
   url: string;
 };
 
+type Phase = { status: "running" } | { status: "error"; message: string };
+
 /**
  * 진단 실행 화면.
- * 픽셀이 아니라 실행 수명주기(현재는 타이머, 이슈 #6에서는 fetch + AbortController)를 소유한다.
- * 진단이 끝나면 /result로 빠져나가므로 상태가 "실행 중" 하나뿐이다 —
- * 이슈 #6에서 진단 실패를 표시할 "error" 상태가 추가된다.
+ * 픽셀이 아니라 실행 수명주기(fetch + AbortController)를 소유한다.
+ * 성공하면 /result로 빠져나가므로, 이 화면에 남는 상태는 "실행 중"과 "실패" 둘뿐이다.
  */
 export function DiagnosisRunner({ url }: DiagnosisRunnerProps) {
   const router = useRouter();
+  const [phase, setPhase] = useState<Phase>({ status: "running" });
   const [elapsedMs, setElapsedMs] = useState(0);
+  /** "다시 진단"이 이 값을 올려 실행 effect를 재실행시킨다. */
+  const [attempt, setAttempt] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
-  // 진단 실행 수명주기 — 이슈 #6은 이 useEffect 본문만 교체하면 된다.
+  // 서버 작업을 지목해 취소하기 위한 실행 식별자.
+  // useState 초기화 함수라 StrictMode 재실행에도 값이 유지된다.
+  const [runId] = useState(() => crypto.randomUUID());
+
+  // 진단 실행 수명주기
   useEffect(() => {
     const controller = new AbortController();
     abortRef.current = controller;
@@ -33,37 +43,109 @@ export function DiagnosisRunner({ url }: DiagnosisRunnerProps) {
     const goToResult = () =>
       router.replace(`/result?url=${encodeURIComponent(url)}`);
 
-    // TODO(#6): 아래 setTimeout을 실제 요청으로 교체한다.
-    //   fetch("/api/diagnose", {
-    //     method: "POST",
-    //     headers: { "Content-Type": "application/json" },
-    //     body: JSON.stringify({ url }),
-    //     signal: controller.signal,
-    //   })
-    //     .then(goToResult)
-    //     .catch((e) => { if (e.name !== "AbortError") setPhase("error"); });
-    const timer = setTimeout(goToResult, PLACEHOLDER_DURATION_MS);
+    void (async () => {
+      try {
+        const response = await fetch("/api/diagnose", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, runId }),
+          signal: controller.signal,
+        });
 
-    // StrictMode 이중 호출에 대비해 타이머를 먼저 정리한 뒤 abort 한다.
+        // proxy가 비로그인 요청을 리다이렉트하면 fetch가 그걸 따라가 로그인 HTML을 200으로
+        // 받아온다. 그대로 두면 "진단 성공"으로 오인하므로 여기서 걸러낸다.
+        // (proxy도 /api/*에는 401 JSON을 주도록 고쳤다. 이건 2차 방어다.)
+        const contentType = response.headers.get("content-type") ?? "";
+        if (response.redirected || !contentType.includes("application/json")) {
+          setPhase({
+            status: "error",
+            message: DIAGNOSE_ERROR_MESSAGE.unauthorized,
+          });
+          return;
+        }
+
+        const body = (await response.json()) as DiagnoseResponse;
+        if (!response.ok || body.ok !== true) {
+          setPhase({
+            status: "error",
+            message:
+              body.ok === false
+                ? body.message
+                : DIAGNOSE_ERROR_MESSAGE.internal,
+          });
+          return;
+        }
+
+        goToResult();
+      } catch (error) {
+        // 중단은 실패가 아니다. 사용자가 이미 다른 화면으로 이동했거나 StrictMode 정리 중이다.
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setPhase({ status: "error", message: DIAGNOSE_ERROR_MESSAGE.internal });
+      }
+    })();
+
+    // StrictMode 이중 호출에 대비해 abort만 한다. 여기서 취소 비콘을 보내면
+    // 정리될 때마다 서버 진단을 죽이게 된다 — 비콘은 사용자가 버튼을 눌렀을 때만 보낸다.
     return () => {
-      clearTimeout(timer);
       controller.abort();
     };
-  }, [router, url]);
+  }, [router, url, runId, attempt]);
 
   // 경과 시간. 카운터를 증가시키지 않고 Date.now() 차이로 계산해
   // 백그라운드 탭 스로틀링이 걸려도 값이 어긋나지 않게 한다.
   useEffect(() => {
+    if (phase.status !== "running") return;
+
+    // 경과 시간 초기화는 "다시 진단" 클릭 핸들러에서 한다 — effect 본문에서 setState 하면
+    // 렌더가 연쇄된다.
     const startedAt = Date.now();
     const id = setInterval(() => setElapsedMs(Date.now() - startedAt), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [phase.status, attempt]);
 
   function handleAbort() {
     abortRef.current?.abort();
+
+    // 연결 종료(request.signal)에만 의존하지 않는다 — 프록시/HTTP2 환경에서는 전달이
+    // 보장되지 않는다. keepalive로 보내 화면 전환 중에도 요청이 살아남게 한다.
+    void fetch("/api/diagnose", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId }),
+      keepalive: true,
+    }).catch(() => {});
+
     // 입력했던 주소를 메인 페이지에 되돌려준다.
     // replace이므로 뒤로 가기로 /diagnose에 재진입해 진단이 다시 시작되지 않는다.
     router.replace(`/?url=${encodeURIComponent(url)}`);
+  }
+
+  if (phase.status === "error") {
+    return (
+      <section className="flex flex-col gap-lg rounded border border-outline-variant bg-surface-container-lowest p-lg">
+        <div className="flex flex-col gap-xs">
+          <span className="font-heading text-label-caps text-on-surface-variant">
+            진단 대상
+          </span>
+          <p className="font-mono text-code-md break-all text-on-surface">
+            {url}
+          </p>
+        </div>
+
+        <ErrorAlert message={phase.message}>
+          <Button
+            type="button"
+            onClick={() => {
+              setElapsedMs(0);
+              setPhase({ status: "running" });
+              setAttempt((value) => value + 1);
+            }}
+          >
+            다시 진단
+          </Button>
+        </ErrorAlert>
+      </section>
+    );
   }
 
   return (

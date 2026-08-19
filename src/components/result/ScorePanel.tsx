@@ -1,5 +1,5 @@
 import type { HTMLAttributes } from "react";
-import { Button } from "@/components/ui/Button";
+import { SaveToFolderButton } from "@/components/result/SaveToFolderButton";
 import {
   GRADE_LABEL,
   MAX_SCORE,
@@ -142,37 +142,7 @@ export function ScorePanel({
         ))}
       </dl>
 
-      {/* 저장 기능은 이슈 #8. 설명 없는 비활성 버튼은 그 자체로 접근성 결함이므로
-          보조 문구를 aria-describedby로 연결해 이유가 함께 낭독되게 한다. */}
-      <div className="flex flex-col gap-sm">
-        <Button
-          type="button"
-          disabled
-          aria-describedby="save-pending-note"
-          className="self-start"
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="square"
-            className="h-4 w-4"
-          >
-            <path d="M5 3h11l3 3v15H5z" />
-            <polyline points="8 3 8 9 15 9" />
-            <rect x="8" y="13" width="8" height="6" />
-          </svg>
-          폴더에 저장
-        </Button>
-        <p
-          id="save-pending-note"
-          className="font-sans text-body-sm text-on-surface-variant"
-        >
-          폴더 저장 기능은 이후 작업에서 연결됩니다.
-        </p>
-      </div>
+      <SaveToFolderButton url={meta.url} />
     </section>
   );
 }

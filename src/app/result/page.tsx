@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { DiagnosisErrorState } from "@/components/diagnosis/DiagnosisErrorState";
 import { DiagnosisReport } from "@/components/result/DiagnosisReport";
+import { SaveToFolderButton } from "@/components/result/SaveToFolderButton";
 import { getDiagnosisResult } from "@/lib/diagnosis/source";
 
 export const metadata: Metadata = {
@@ -33,7 +34,12 @@ export default async function ResultPage({ searchParams }: PageProps<"/result">)
       <main className="mx-auto flex w-full max-w-[64rem] flex-1 flex-col gap-lg px-lg py-xl">
         <h1 className="font-heading text-display-lg text-navy-deep">진단 결과</h1>
 
-        <DiagnosisReport result={source.result} />
+        {/* "폴더에 저장"은 페이지가 주입한다 — ScorePanel이 직접 import하면
+            저장된 진단 화면(마이페이지)에서도 따라와 재저장 버튼이 생긴다. */}
+        <DiagnosisReport
+          result={source.result}
+          actions={<SaveToFolderButton url={source.result.meta.url} />}
+        />
       </main>
     </>
   );

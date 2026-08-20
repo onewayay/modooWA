@@ -34,3 +34,24 @@ export type SaveFolderState = {
   /** 저장에 성공한 폴더 이름. 존재 자체가 "방금 저장됨"의 신호다. */
   savedFolderName?: string;
 };
+
+/** 마이페이지 폴더 목록용 — 폴더 + 그 안에 저장된 진단 개수. */
+export type FolderSummary = Folder & {
+  diagnosisCount: number;
+};
+
+export type LoadFolderSummariesResult =
+  | { ok: true; folders: FolderSummary[] }
+  | { ok: false; error: string };
+
+/** 인라인 이름 변경 액션의 상태. renamedName의 존재가 "방금 성공"의 신호다. */
+export type RenameFolderState = {
+  error?: string;
+  renamedName?: string;
+};
+
+/** 폴더 삭제 액션의 상태. 성공하면 목록에서 행 자체가 사라지므로 신호는 boolean이면 충분하다. */
+export type DeleteFolderState = {
+  error?: string;
+  deleted?: true;
+};

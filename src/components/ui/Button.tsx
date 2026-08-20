@@ -1,8 +1,10 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
 type ButtonProps = {
   variant?: "primary" | "secondary" | "ghost";
   children: ReactNode;
+  /** React 19에서는 ref가 일반 prop이므로 forwardRef 없이 그대로 흘려보낸다(Input과 같은 방식). */
+  ref?: Ref<HTMLButtonElement>;
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
 const baseStyles =

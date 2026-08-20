@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { signOut } from "@/lib/auth/actions";
 import { createClient } from "@/lib/supabase/server";
 import { BrandMark } from "@/components/ui/BrandMark";
@@ -10,8 +11,11 @@ import { Button } from "@/components/ui/Button";
  * 페이지 자체는 user가 필요 없어서, prop으로 내리면 모든 페이지가 쓰지도 않는 Supabase를
  * import하게 된다. 비용은 렌더당 getUser() 1회.
  *
- * 목업의 "저장한 진단" 링크와 숫자 배지는 제외한다
- * (숫자 배지는 DESIGN.md가 명시적으로 배제, 저장 기능은 후속 이슈).
+ * 목업의 "저장한 진단" 옆 숫자 배지는 넣지 않는다(DESIGN.md가 명시적으로 배제).
+ * 링크 자체는 마이페이지(이슈 #9)가 생기면서 되살아났다.
+ *
+ * 현재 경로를 강조하지 않는 이유: 서버 컴포넌트는 pathname을 읽을 수 없어 클라이언트 래퍼가
+ * 하나 더 필요해지는데, 메뉴 항목이 하나뿐이라 그만한 값을 하지 못한다.
  */
 export async function AppHeader() {
   const supabase = await createClient();
@@ -36,6 +40,17 @@ export async function AppHeader() {
         </div>
 
         <div className="flex items-center gap-md">
+          {/* Button은 <button>이라 링크로 쓸 수 없다. ghost 버튼의 시각·터치타겟(44px)·
+              포커스 링 규정을 그대로 옮겨 Link에 입힌다. */}
+          <nav aria-label="주요 메뉴">
+            <Link
+              href="/my"
+              className="inline-flex min-h-11 items-center rounded px-md font-sans text-body-md font-medium text-navy-deep transition-colors hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-lowest"
+            >
+              마이페이지
+            </Link>
+          </nav>
+
           <span className="hidden max-w-[14rem] truncate font-sans text-body-sm text-on-surface-variant sm:inline">
             {user?.email}
           </span>

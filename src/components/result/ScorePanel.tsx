@@ -1,11 +1,11 @@
-import type { HTMLAttributes } from "react";
-import { SaveToFolderButton } from "@/components/result/SaveToFolderButton";
+import type { HTMLAttributes, ReactNode } from "react";
+import { GRADE_TONE_CLASS } from "@/components/ui/gradeTone";
+import { formatDiagnosedAt } from "@/lib/diagnosis/format";
 import {
   GRADE_LABEL,
   MAX_SCORE,
   getGrade,
   getScoreRatio,
-  type Grade,
 } from "@/lib/diagnosis/score";
 import {
   SEVERITY_LABEL,
@@ -17,33 +17,28 @@ import {
 type ScorePanelProps = {
   meta: DiagnosisMeta;
   summary: DiagnosisSummary;
+  /**
+   * 패널 하단 조작 슬롯. 새 진단 결과에서는 "폴더에 저장",
+   * 저장된 진단(마이페이지)에서는 "다른 폴더로 이동"이 들어온다.
+   *
+   * boolean prop(showSaveButton)이 아니라 슬롯인 이유: 두 화면이 같은 자리에
+   * "다른 컨트롤"을 놓기 때문이다. 덕분에 이 컴포넌트가 진짜로 순수 프레젠테이션이 된다.
+   */
+  actions?: ReactNode;
 } & HTMLAttributes<HTMLElement>;
 
 // DESIGN.md 고도 규칙: Surface 1 = 화이트 + 저대비 아웃라인, 그림자 없음
 const panelStyles =
   "flex flex-col gap-lg rounded border border-outline-variant bg-surface-container-lowest p-lg";
 
-// 등급 색은 심각도 토큰을 그대로 재사용한다.
-// 점(dot)과 미터 바 채움에만 쓰고 텍스트 배경으로는 쓰지 않는다 — 대비 위험을 만들지 않기 위해서다.
-//
-// 두 요소 모두 aria-hidden이고, 같은 정보를 바로 옆의 숫자("72 / 100")와 한글 등급 라벨이
-// 문자로 전달한다. 그래서 WCAG 1.4.11(비텍스트 대비 3:1)의 "장식 요소" 예외에 해당한다 —
-// 실측상 warning 채움은 트랙(surface-container-high) 대비 2.60:1, 칩 배경 대비 2.89:1로
-// 3:1에 못 미치는데, 이 색을 유지할 수 있는 근거가 위의 "색만으로 정보를 전달하지 않는다"이다.
-const gradeToneStyles: Record<Grade, string> = {
-  excellent: "bg-success",
-  good: "bg-info",
-  "needs-improvement": "bg-warning",
-  poor: "bg-critical",
-};
-
 /**
- * 결과 화면 최상단 요약 패널 — 종합 점수·등급, 진단 대상 메타, "폴더에 저장" 진입점.
+ * 결과 화면 최상단 요약 패널 — 종합 점수·등급, 진단 대상 메타.
  * summary.bySeverity를 그대로 읽는다(PLAN.md §6: issues를 순회하지 않고 요약을 그리기 위한 필드).
  */
 export function ScorePanel({
   meta,
   summary,
+  actions,
   className = "",
   ...rest
 }: ScorePanelProps) {
@@ -82,7 +77,7 @@ export function ScorePanel({
           <span className="inline-flex w-fit items-center gap-sm rounded-sm border border-outline-variant bg-surface-container-low px-sm py-xs font-heading text-label-caps text-navy-deep">
             <span
               aria-hidden="true"
-              className={`h-2 w-2 rounded-full ${gradeToneStyles[grade]}`}
+              className={`h-2 w-2 rounded-full ${GRADE_TONE_CLASS[grade]}`}
             />
             {GRADE_LABEL[grade]}
           </span>
@@ -95,7 +90,7 @@ export function ScorePanel({
             className="h-1 w-full max-w-[16rem] overflow-hidden rounded-sm bg-surface-container-high"
           >
             <div
-              className={`h-full ${gradeToneStyles[grade]}`}
+              className={`h-full ${GRADE_TONE_CLASS[grade]}`}
               style={{ width: `${ratio}%` }}
             />
           </div>
@@ -142,20 +137,7 @@ export function ScorePanel({
         ))}
       </dl>
 
-      <SaveToFolderButton url={meta.url} />
+      {actions}
     </section>
   );
-}
-
-/**
- * ISO 문자열 → "2026. 8. 16. 오후 7:00".
- * 서버와 클라이언트의 기본 로캘·타임존이 달라 하이드레이션 불일치가 나지 않도록
- * ko-KR과 Asia/Seoul을 명시한다.
- */
-function formatDiagnosedAt(iso: string): string {
-  return new Intl.DateTimeFormat("ko-KR", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: "Asia/Seoul",
-  }).format(new Date(iso));
 }

@@ -1,19 +1,19 @@
 "use client";
 
-import { useActionState, useEffect, useId, useRef, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { FolderChoiceFields } from "@/components/folders/FolderChoiceFields";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import {
   loadFoldersEnsuringDefault,
   saveDiagnosisToFolder,
 } from "@/lib/folders/actions";
 import {
-  FOLDER_NAME_MAX_LENGTH,
   NEW_FOLDER_VALUE,
   type Folder,
   type SaveFolderState,
 } from "@/lib/folders/types";
+import { useFreshActionState } from "@/lib/hooks/useFreshActionState";
 
 type FolderPickerDialogProps = {
   open: boolean;
@@ -25,12 +25,7 @@ type FolderPickerDialogProps = {
 
 const EMPTY_STATE: SaveFolderState = {};
 
-/**
- * "폴더에 저장" 모달. 기존 폴더 목록 + 새 폴더 만들기(PLAN.md §4).
- *
- * 폴더 선택은 fieldset + 네이티브 radio로 만든다. 단일 선택의 올바른 시맨틱이고
- * 화살표 키 이동과 선택 상태 낭독을 브라우저가 그냥 해 준다.
- */
+/** "폴더에 저장" 모달. 기존 폴더 목록 + 새 폴더 만들기(PLAN.md §4). */
 export function FolderPickerDialog({
   open,
   url,
@@ -45,23 +40,10 @@ export function FolderPickerDialog({
   const [folders, setFolders] = useState<Folder[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [choice, setChoice] = useState("");
-  const newNameRef = useRef<HTMLInputElement>(null);
 
-  const groupId = useId();
-  const newNameId = `${groupId}-new-folder-name`;
-
-  // 모달이 열리는 순간의 액션 state는 "지난 회차의 결과"다.
-  // useActionState는 모달을 닫아도 마지막 결과를 들고 있어서, 이대로 두면
-  // 저장 실패 후 다시 연 모달에 이전 에러가 그대로 떠 있고, 저장 성공 후 다시 열면
-  // 성공 처리가 즉시 재실행되어 모달이 열리자마자 닫힌다.
-  // prop 변화에 맞춰 렌더 중에 상태를 조정하는 React 공식 패턴으로 그 시점을 기억해 둔다.
-  const [staleState, setStaleState] = useState(state);
-  const [prevOpen, setPrevOpen] = useState(open);
-  if (open !== prevOpen) {
-    setPrevOpen(open);
-    if (open) setStaleState(state);
-  }
-  const freshState = state === staleState ? EMPTY_STATE : state;
+  // 모달이 열리는 순간의 액션 state는 "지난 회차의 결과"라 걸러 낸다.
+  // (같은 문제를 겪는 곳이 여러 군데라 훅으로 뺐다 — useFreshActionState 주석 참고)
+  const freshState = useFreshActionState(state, open, EMPTY_STATE);
 
   // 열릴 때마다 목록을 다시 읽는다. 다른 탭에서 폴더를 만들었을 수도 있고,
   // 이 액션이 "폴더가 없으면 기본 폴더를 만들어 주는" 역할도 겸한다.
@@ -90,11 +72,6 @@ export function FolderPickerDialog({
       cancelled = true;
     };
   }, [open]);
-
-  // "새 폴더 만들기"를 고르면 바로 입력할 수 있어야 한다.
-  useEffect(() => {
-    if (choice === NEW_FOLDER_VALUE) newNameRef.current?.focus();
-  }, [choice]);
 
   useEffect(() => {
     if (freshState.savedFolderName) onSaved(freshState.savedFolderName);
@@ -146,62 +123,13 @@ export function FolderPickerDialog({
         <form action={formAction} className="flex flex-col gap-lg">
           <input type="hidden" name="url" value={url} />
 
-          <fieldset className="flex flex-col gap-sm">
-            <legend className="mb-sm font-sans text-body-sm font-medium text-navy-deep">
-              저장할 폴더
-            </legend>
-
-            {folders.map((folder) => (
-              <FolderOption
-                key={folder.id}
-                value={folder.id}
-                checked={choice === folder.id}
-                onSelect={setChoice}
-                disabled={isPending}
-              >
-                {folder.name}
-              </FolderOption>
-            ))}
-
-            <FolderOption
-              value={NEW_FOLDER_VALUE}
-              checked={choice === NEW_FOLDER_VALUE}
-              onSelect={setChoice}
-              disabled={isPending}
-              dashed
-            >
-              {/* DESIGN.md 모양 규정: 아이콘은 2px 선형 스트로크 + 각진 끝.
-                  "＋" 같은 글리프는 본문 폰트의 획 굵기를 따라가므로 규정을 만족하지 못하고,
-                  스크린리더가 "플러스 기호"로 읽어 버린다. */}
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="square"
-                className="h-4 w-4 shrink-0"
-              >
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              새 폴더 만들기
-            </FolderOption>
-          </fieldset>
-
-          {/* 선택했을 때만 렌더한다 — 비활성 입력창을 계속 띄워 두면 탭 순서에 잡히지 않는
-              빈 칸이 남아 무엇을 해야 하는지 흐려진다. */}
-          {choice === NEW_FOLDER_VALUE ? (
-            <Input
-              id={newNameId}
-              name="newFolderName"
-              label="새 폴더 이름"
-              ref={newNameRef}
-              maxLength={FOLDER_NAME_MAX_LENGTH}
-              autoComplete="off"
-              disabled={isPending}
-            />
-          ) : null}
+          <FolderChoiceFields
+            folders={folders}
+            legend="저장할 폴더"
+            value={choice}
+            onChange={setChoice}
+            disabled={isPending}
+          />
 
           <div className="flex flex-wrap justify-end gap-sm">
             <Button
@@ -219,56 +147,5 @@ export function FolderPickerDialog({
         </form>
       ) : null}
     </Modal>
-  );
-}
-
-type FolderOptionProps = {
-  value: string;
-  checked: boolean;
-  onSelect: (value: string) => void;
-  disabled: boolean;
-  /** "새 폴더 만들기" 행을 기존 폴더와 구분하기 위한 점선 테두리 */
-  dashed?: boolean;
-  children: React.ReactNode;
-};
-
-/**
- * 폴더 한 줄.
- *
- * 네이티브 radio를 숨기지 않고 그대로 보여준다 — 선택 상태를 색이 아니라 컨트롤 자체가 전달하므로
- * DESIGN.md의 "색만으로 정보를 전달하지 않는다"를 자동으로 만족한다.
- * 포커스 링은 has-[:focus-visible]로 행 전체에 그려 2px 링 + 2px 오프셋 규정을 지킨다.
- */
-function FolderOption({
-  value,
-  checked,
-  onSelect,
-  disabled,
-  dashed = false,
-  children,
-}: FolderOptionProps) {
-  return (
-    <label
-      className={`flex min-h-11 items-center gap-sm rounded border px-md py-sm font-sans text-body-md text-on-surface transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary-container has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-surface-container-lowest ${
-        dashed ? "border-dashed" : ""
-      } ${
-        checked
-          ? "border-primary-container bg-surface-container-low"
-          : "border-outline-variant hover:bg-surface-container-low"
-      } ${
-        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
-      }`.trim()}
-    >
-      <input
-        type="radio"
-        name="folderId"
-        value={value}
-        checked={checked}
-        disabled={disabled}
-        onChange={() => onSelect(value)}
-        className="h-4 w-4 shrink-0 accent-primary-container focus-visible:outline-none"
-      />
-      <span className="flex items-center gap-sm break-all">{children}</span>
-    </label>
   );
 }

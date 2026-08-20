@@ -1,16 +1,20 @@
+import type { ReactNode } from "react";
 import { ScorePanel } from "@/components/result/ScorePanel";
 import { SeverityGroup } from "@/components/result/SeverityGroup";
 import { SEVERITY_ORDER, type DiagnosisResult } from "@/lib/diagnosis/types";
 
 type DiagnosisReportProps = {
   result: DiagnosisResult;
+  /** 요약 패널 하단 조작 슬롯. ScorePanel로 그대로 흘려보낸다. */
+  actions?: ReactNode;
 };
 
 /**
  * 결과 화면 본문 전체.
- * DiagnosisResult만 받는 순수 프레젠테이션이라 진단 엔진(이슈 #6)이 붙어도 수정할 부분이 없다.
+ * DiagnosisResult만 받는 순수 프레젠테이션이라, 방금 실행한 진단이든
+ * DB에 저장된 result_json이든(마이페이지) 같은 컴포넌트로 렌더된다.
  */
-export function DiagnosisReport({ result }: DiagnosisReportProps) {
+export function DiagnosisReport({ result, actions }: DiagnosisReportProps) {
   const { meta, summary, issues } = result;
 
   // 심각도별로 한 번만 나눠 둔다.
@@ -25,7 +29,7 @@ export function DiagnosisReport({ result }: DiagnosisReportProps) {
 
   return (
     <div className="flex flex-col gap-lg">
-      <ScorePanel meta={meta} summary={summary} />
+      <ScorePanel meta={meta} summary={summary} actions={actions} />
 
       {issuesBySeverity.map(({ severity, items }) => (
         <SeverityGroup

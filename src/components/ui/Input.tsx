@@ -6,6 +6,12 @@ type InputProps = {
   id: string;
   /** 입력창 오른쪽에 붙는 보조 컨트롤(예: 제출 버튼). 모바일에서는 아래로 쌓인다. */
   action?: ReactNode;
+  /**
+   * 레이블을 시각적으로만 숨긴다(DOM에는 남는다).
+   * 인라인 편집처럼 주변 문맥이 이미 무엇을 고치는 칸인지 말해 주는 자리에서만 쓴다.
+   * DESIGN.md의 "레이블 항상 노출, 플로팅 레이블 금지"에 대한 좁은 예외이므로 기본값은 false다.
+   */
+  labelHidden?: boolean;
   /** React 19에서는 ref가 일반 prop이므로 forwardRef 없이 그대로 흘려보낸다. */
   ref?: Ref<HTMLInputElement>;
 } & InputHTMLAttributes<HTMLInputElement>;
@@ -15,6 +21,7 @@ export function Input({
   error,
   id,
   action,
+  labelHidden = false,
   className = "",
   ...rest
 }: InputProps) {
@@ -51,7 +58,14 @@ export function Input({
 
   return (
     <div className="flex flex-col gap-xs">
-      <label htmlFor={id} className="font-sans text-body-sm font-medium text-navy-deep">
+      <label
+        htmlFor={id}
+        className={
+          labelHidden
+            ? "sr-only"
+            : "font-sans text-body-sm font-medium text-navy-deep"
+        }
+      >
         {label}
       </label>
 

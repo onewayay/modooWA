@@ -1,12 +1,21 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { getDiagnosisResult } from "@/lib/diagnosis/source";
 import {
-  DEFAULT_FOLDER_NAME,
+  FOLDER_COLUMNS,
+  UNIQUE_VIOLATION,
+  createOrReuseFolder,
+  ensureDefaultFolder,
+  toFolder,
+} from "@/lib/folders/db";
+import {
   FOLDER_NAME_MAX_LENGTH,
   NEW_FOLDER_VALUE,
+  type DeleteFolderState,
   type Folder,
   type LoadFoldersResult,
+  type RenameFolderState,
   type SaveFolderState,
 } from "@/lib/folders/types";
 import { createClient } from "@/lib/supabase/server";
@@ -25,62 +34,17 @@ import { createClient } from "@/lib/supabase/server";
  *    folder_id가 본인 폴더인지까지 검사하므로, 남의 폴더 id를 넣으면 DB가 거부한다.
  */
 
-/** Postgres unique_violation. 폴더 이름 중복을 에러가 아니라 "이미 있는 폴더"로 다루는 데 쓴다. */
-const UNIQUE_VIOLATION = "23505";
-
-type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
-
-type FolderRow = {
-  id: string;
-  name: string;
-  created_at: string;
-};
-
-const FOLDER_COLUMNS = "id, name, created_at";
-
-function toFolder(row: FolderRow): Folder {
-  return { id: row.id, name: row.name, createdAt: row.created_at };
-}
-
-async function listFolders(
-  supabase: SupabaseServerClient,
-  userId: string
-): Promise<Folder[]> {
-  // RLS가 이미 본인 행만 통과시키지만 user_id 조건을 함께 건다 —
-  // folders_user_id_created_at_idx를 타게 하고, 정책이 잘못돼도 데이터가 새지 않게 하는 이중 방어다.
-  const { data, error } = await supabase
-    .from("folders")
-    .select(FOLDER_COLUMNS)
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true });
-
-  if (error) throw error;
-  return (data ?? []).map(toFolder);
-}
-
 /**
- * 폴더가 하나도 없으면 "기본 폴더"를 만들고 목록을 돌려준다(PLAN.md §4의 "첫 저장 시" 지연 생성).
+ * 폴더/진단을 바꾼 뒤 무효화할 경로.
  *
- * 조회 경로에서 쓰기가 일어나는 건 의도한 것이다. 모달이 빈 목록으로 열리면 사용자는
- * "저장할 곳이 없는" 막다른 상태에 빠진다. 연산은 멱등하고,
- * folders_user_id_name_key 덕분에 두 탭에서 동시에 열어도 폴더가 둘 생기지 않는다.
+ * "layout"인 이유: 마이페이지의 세 화면(목록·폴더 상세·진단 상세)이 전부 /my 하위라
+ * 이 한 번으로 다 걷힌다. 특히 폴더 이동은 이전 폴더와 새 폴더 두 페이지에 동시에 영향을 주는데,
+ * 경로를 하나씩 나열하면 빠뜨리기 쉽다.
+ *
+ * Supabase 조회 자체는 캐시되지 않으므로 서버 데이터는 늘 최신이다. 이 호출이 막는 것은
+ * 클라이언트 라우터 캐시에 남은 예전 RSC 페이로드다(뒤로 가기 했을 때 보이는 옛 개수·옛 이름).
  */
-async function ensureDefaultFolder(
-  supabase: SupabaseServerClient,
-  userId: string
-): Promise<Folder[]> {
-  const existing = await listFolders(supabase, userId);
-  if (existing.length > 0) return existing;
-
-  const { error } = await supabase
-    .from("folders")
-    .insert({ user_id: userId, name: DEFAULT_FOLDER_NAME });
-
-  // 경합에서 진 쪽은 unique 위반을 받는데, 원하는 상태(폴더가 존재함)는 이미 이뤄졌으므로 그냥 넘어간다.
-  if (error && error.code !== UNIQUE_VIOLATION) throw error;
-
-  return listFolders(supabase, userId);
-}
+const MY_PATH = "/my";
 
 /** 폴더 선택 모달이 열릴 때 호출한다. */
 export async function loadFoldersEnsuringDefault(): Promise<LoadFoldersResult> {
@@ -97,35 +61,6 @@ export async function loadFoldersEnsuringDefault(): Promise<LoadFoldersResult> {
     console.error("[folders] 폴더 목록 조회 실패", error);
     return { ok: false, error: "폴더 목록을 불러오지 못했습니다." };
   }
-}
-
-/**
- * 이름으로 폴더를 만든다. 같은 이름이 이미 있으면 새로 만들지 않고 그 폴더를 쓴다 —
- * "이름이 중복입니다"로 되돌려 보내는 것보다 사용자가 의도한 결과(그 폴더에 저장)에 가깝다.
- */
-async function createOrReuseFolder(
-  supabase: SupabaseServerClient,
-  userId: string,
-  name: string
-): Promise<Folder> {
-  const { data, error } = await supabase
-    .from("folders")
-    .insert({ user_id: userId, name })
-    .select(FOLDER_COLUMNS)
-    .single();
-
-  if (!error) return toFolder(data);
-  if (error.code !== UNIQUE_VIOLATION) throw error;
-
-  const { data: existing, error: selectError } = await supabase
-    .from("folders")
-    .select(FOLDER_COLUMNS)
-    .eq("user_id", userId)
-    .eq("name", name)
-    .single();
-
-  if (selectError) throw selectError;
-  return toFolder(existing);
 }
 
 export async function saveDiagnosisToFolder(
@@ -193,9 +128,103 @@ export async function saveDiagnosisToFolder(
 
     if (insertError) throw insertError;
 
+    revalidatePath(MY_PATH, "layout");
     return { savedFolderName: folder.name };
   } catch (error) {
     console.error("[folders] 진단 결과 저장 실패", error);
     return { error: "진단 결과를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+  }
+}
+
+/**
+ * 폴더 이름 변경(PLAN.md §4 Phase 2).
+ *
+ * createOrReuseFolder와 달리 이름 중복을 "기존 폴더 재사용"으로 흡수하지 않는다.
+ * 이름 변경에서의 재사용은 곧 두 폴더를 합치는 것이고, 사용자가 요청한 적 없는 파괴적 동작이다.
+ */
+export async function renameFolder(
+  _prevState: RenameFolderState,
+  formData: FormData
+): Promise<RenameFolderState> {
+  const folderId = String(formData.get("folderId") ?? "");
+  // unique 제약이 (user_id, btrim(name))이라 서버에서도 같은 기준으로 다듬는다.
+  const name = String(formData.get("name") ?? "").trim();
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "로그인이 필요합니다." };
+  if (!folderId) return { error: "폴더를 찾을 수 없습니다." };
+  if (!name) return { error: "폴더 이름을 입력해 주세요." };
+  if (name.length > FOLDER_NAME_MAX_LENGTH) {
+    return {
+      error: `폴더 이름은 ${FOLDER_NAME_MAX_LENGTH}자 이내로 입력해 주세요.`,
+    };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("folders")
+      .update({ name })
+      .eq("id", folderId)
+      .eq("user_id", user.id)
+      .select(FOLDER_COLUMNS)
+      .maybeSingle();
+
+    if (error?.code === UNIQUE_VIOLATION) {
+      return { error: "같은 이름의 폴더가 이미 있습니다. 다른 이름을 입력해 주세요." };
+    }
+    if (error) throw error;
+    // RLS select 정책 때문에 남의 폴더는 없는 것으로 나온다.
+    if (!data) return { error: "폴더를 찾을 수 없습니다." };
+
+    revalidatePath(MY_PATH, "layout");
+    return { renamedName: toFolder(data).name };
+  } catch (error) {
+    console.error("[folders] 폴더 이름 변경 실패", error);
+    return { error: "폴더 이름을 변경하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+  }
+}
+
+/**
+ * 폴더 삭제. diagnoses.folder_id의 on delete cascade 때문에 안에 있던 진단도 함께 사라진다
+ * (경고 문구는 DeleteFolderDialog가 건수까지 넣어 보여준다).
+ *
+ * "기본 폴더"도 막지 않는다. 지우고 나서 다음에 저장하면 ensureDefaultFolder가 다시 만들어 주므로
+ * 막다른 상태가 생기지 않고, 하나만 특별 취급하면 왜 이것만 안 지워지는지 설명할 방법이 없다.
+ */
+export async function deleteFolder(
+  _prevState: DeleteFolderState,
+  formData: FormData
+): Promise<DeleteFolderState> {
+  const folderId = String(formData.get("folderId") ?? "");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "로그인이 필요합니다." };
+  if (!folderId) return { error: "폴더를 찾을 수 없습니다." };
+
+  try {
+    const { data, error } = await supabase
+      .from("folders")
+      .delete()
+      .eq("id", folderId)
+      .eq("user_id", user.id)
+      .select("id")
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return { error: "폴더를 찾을 수 없습니다." };
+
+    revalidatePath(MY_PATH, "layout");
+    return { deleted: true };
+  } catch (error) {
+    console.error("[folders] 폴더 삭제 실패", error);
+    return { error: "폴더를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요." };
   }
 }
